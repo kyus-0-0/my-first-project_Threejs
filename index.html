@@ -16,9 +16,22 @@
     canvas {
       display: block;
     }
+    #debug-hud {
+      position: fixed;
+      top: 8px;
+      left: 8px;
+      color: #ffffff;
+      text-shadow: 0 0 3px #000000, 0 0 3px #000000;
+      font-family: monospace;
+      font-size: 13px;
+      white-space: pre;
+      pointer-events: none;
+      z-index: 10;
+    }
   </style>
 </head>
 <body>
+  <div id="debug-hud"></div>
   <script type="importmap">
     {
       "imports": {
@@ -197,7 +210,10 @@
 
       if (inputX === 0 && inputZ === 0) return;
 
-      characterCamera.getWorldDirection(cameraForward);
+      // 카메라가 실제로 바라보고 있는 지점(target)에서 카메라 위치를 뺀 벡터를
+      // "정면"으로 사용한다. getWorldDirection()은 이번 프레임에 아직 반영되지
+      // 않은(한 프레임 지연된) 회전값을 읽을 수 있어서 target 기준으로 계산한다.
+      cameraForward.copy(characterControls.target).sub(characterCamera.position);
       cameraForward.y = 0;
       cameraForward.normalize();
       cameraRight.crossVectors(cameraForward, worldUp).normalize();
@@ -229,6 +245,18 @@
       cameraMarker.lookAt(characterControls.target);
     }
 
+    // 디버그용 HUD: 캐릭터/카메라 현재 위치를 화면 왼쪽 위에 텍스트로 표시
+    const debugHud = document.getElementById("debug-hud");
+    function formatVector(v) {
+      return `(${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)})`;
+    }
+    function updateDebugHud() {
+      const cameraModeLabel = activeCamera === characterCamera ? "캐릭터 카메라" : "월드 카메라";
+      debugHud.textContent =
+        `캐릭터 위치: ${formatVector(controllable.position)}\n` +
+        `카메라 위치: ${formatVector(characterCamera.position)} (${cameraModeLabel})`;
+    }
+
     // 창 크기 변경 대응
     window.addEventListener("resize", () => {
       for (const cam of [characterCamera, worldCamera]) {
@@ -245,6 +273,7 @@
       const delta = clock.getDelta();
       updateMovement(delta);
       updateCameraFollow();
+      updateDebugHud();
       activeControls.update();
       renderer.render(scene, activeCamera);
     }
