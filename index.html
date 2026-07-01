@@ -477,7 +477,7 @@
     // 시점(각도/거리)을 유지한 채로 뒤에서 계속 따라가게 한다.
     // (월드 카메라를 보고 있는 동안에도 계속 갱신되어, 전환 시 바로 올바른 위치에 있다.)
     const previousControllablePosition = controllable.position.clone();
-    const cameraLookOffset = new THREE.Vector3(0, 3, 0); // 캐릭터 머리 높이 정도를 바라봄
+    const cameraLookOffset = new THREE.Vector3(0, 6, 0); // 캐릭터 머리 높이 정도를 바라봄
 
     function updateCameraFollow() {
       const moved = controllable.position.clone().sub(previousControllablePosition);
