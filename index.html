@@ -337,9 +337,10 @@
     const characterControls = new OrbitControls(characterCamera, renderer.domElement);
     characterControls.enableDamping = true;
     // 위/아래로 너무 많이 돌리면 캐릭터가 화면 밖으로 나가버리니 각도를 좁게 제한
-    const verticalOrbitLimit = THREE.MathUtils.degToRad(10); // 수평 기준 위/아래 각 10도
-    characterControls.minPolarAngle = Math.PI / 2 - verticalOrbitLimit;
-    characterControls.maxPolarAngle = Math.PI / 2 + verticalOrbitLimit;
+    const verticalOrbitLimitUp = THREE.MathUtils.degToRad(15); // 수평 기준 위쪽 15도
+    const verticalOrbitLimitDown = THREE.MathUtils.degToRad(5); // 수평 기준 아래쪽 5도
+    characterControls.minPolarAngle = Math.PI / 2 - verticalOrbitLimitUp;
+    characterControls.maxPolarAngle = Math.PI / 2 + verticalOrbitLimitDown;
 
     const worldControls = new OrbitControls(worldCamera, renderer.domElement);
     worldControls.enableDamping = true;
