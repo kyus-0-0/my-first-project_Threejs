@@ -27,11 +27,27 @@
       white-space: pre;
       pointer-events: none;
       z-index: 10;
+      display: none;
+    }
+    #space-hint {
+      position: fixed;
+      bottom: 12%;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #ffffff;
+      text-shadow: 0 0 4px #000000, 0 0 4px #000000;
+      font-family: sans-serif;
+      font-size: 18px;
+      letter-spacing: 1px;
+      pointer-events: none;
+      z-index: 10;
+      display: none;
     }
   </style>
 </head>
 <body>
   <div id="debug-hud"></div>
+  <div id="space-hint">스페이스바를 눌러 시작하세요</div>
   <script type="importmap">
     {
       "imports": {
@@ -44,6 +60,8 @@
     import * as THREE from "three";
     import { OrbitControls } from "three/addons/controls/OrbitControls.js";
     import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
+    import { FontLoader } from "three/addons/loaders/FontLoader.js";
+    import { TextGeometry } from "three/addons/geometries/TextGeometry.js";
 
     // 장면 생성
     const scene = new THREE.Scene();
@@ -73,6 +91,93 @@
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     document.body.appendChild(renderer.domElement);
+
+    // ── 로딩(인트로) 화면: "Hello World!!!" 를 한 글자씩 3D로 보여주다가
+    //    스페이스바를 누르면 캐릭터 화면으로 전환한다 ──────────────────
+    let appState = "intro"; // "intro" | "game"
+
+    const introScene = new THREE.Scene();
+    introScene.background = new THREE.Color(0x111318);
+
+    const introCamera = new THREE.PerspectiveCamera(
+      50,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      100
+    );
+    introCamera.position.set(0, 0, 10);
+
+    introScene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const introLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    introLight.position.set(3, 4, 6);
+    introScene.add(introLight);
+
+    const introFullText = "Hello World!!!";
+    const introLetterInterval = 0.15; // 글자 하나 나오는 간격(초)
+    let introFont = null;
+    let introTextMesh = null;
+    let introRevealedCount = 0;
+    let introTimer = 0;
+    let introReadyForSpace = false;
+
+    const spaceHint = document.getElementById("space-hint");
+
+    function rebuildIntroText() {
+      if (introTextMesh) {
+        introScene.remove(introTextMesh);
+        introTextMesh.geometry.dispose();
+        introTextMesh.material.dispose();
+      }
+      const displayText = introFullText.slice(0, introRevealedCount);
+      if (!introFont || displayText.length === 0) return;
+
+      const geometry = new TextGeometry(displayText, {
+        font: introFont,
+        size: 1,
+        depth: 0.25,
+        curveSegments: 8,
+      });
+      geometry.computeBoundingBox();
+      const centerX = -0.5 * (geometry.boundingBox.max.x - geometry.boundingBox.min.x);
+      const centerY = -0.5 * (geometry.boundingBox.max.y - geometry.boundingBox.min.y);
+
+      const material = new THREE.MeshStandardMaterial({ color: 0xffe08a });
+      introTextMesh = new THREE.Mesh(geometry, material);
+      introTextMesh.position.set(centerX, centerY, 0);
+      introScene.add(introTextMesh);
+    }
+
+    const fontLoader = new FontLoader();
+    fontLoader.load(
+      "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/fonts/helvetiker_regular.typeface.json",
+      (loadedFont) => {
+        introFont = loadedFont;
+      },
+      undefined,
+      (error) => {
+        console.error("인트로 폰트 로드 실패:", error);
+      }
+    );
+
+    function updateIntro(delta) {
+      if (!introFont || introRevealedCount >= introFullText.length) return;
+      introTimer += delta;
+      if (introTimer < introLetterInterval) return;
+      introTimer -= introLetterInterval;
+      introRevealedCount += 1;
+      rebuildIntroText();
+      if (introRevealedCount === introFullText.length) {
+        introReadyForSpace = true;
+        spaceHint.style.display = "block";
+      }
+    }
+
+    function startGame() {
+      appState = "game";
+      spaceHint.style.display = "none";
+      debugHud.style.display = "block";
+      for (const key of Object.keys(keysPressed)) keysPressed[key] = false;
+    }
 
     // 이동이 잘 되는지 눈으로 확인하기 쉽도록 바둑판(체크판) 패턴 텍스처 생성
     function createCheckerTexture(colorA = "#aaaaaa", colorB = "#777777") {
@@ -205,6 +310,14 @@
       "arrowup", "arrowdown", "arrowleft", "arrowright",
     ]);
     window.addEventListener("keydown", (e) => {
+      if (appState === "intro") {
+        if (e.code === "Space" || e.key === " ") {
+          e.preventDefault();
+          if (introReadyForSpace) startGame();
+        }
+        return; // 인트로 중에는 이동/카메라 전환 키를 무시한다
+      }
+
       const key = e.key.toLowerCase();
       if (moveKeys.has(key)) e.preventDefault();
       keysPressed[key] = true;
@@ -285,7 +398,7 @@
 
     // 창 크기 변경 대응
     window.addEventListener("resize", () => {
-      for (const cam of [characterCamera, worldCamera]) {
+      for (const cam of [characterCamera, worldCamera, introCamera]) {
         cam.aspect = window.innerWidth / window.innerHeight;
         cam.updateProjectionMatrix();
       }
@@ -297,6 +410,13 @@
     function animate() {
       requestAnimationFrame(animate);
       const delta = clock.getDelta();
+
+      if (appState === "intro") {
+        updateIntro(delta);
+        renderer.render(introScene, introCamera);
+        return;
+      }
+
       updateMovement(delta);
       updateCameraFollow();
       updateDebugHud();
