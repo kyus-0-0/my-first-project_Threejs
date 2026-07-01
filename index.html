@@ -122,20 +122,45 @@
     let controllable = placeholderBox;
 
     // models/ch.fbx 가 저장소에 올라오면 자동으로 불러와 임시 박스 자리에 표시
+    let modelStatus = "로딩 중...";
     const fbxLoader = new FBXLoader();
     fbxLoader.load(
       "./models/ch.fbx",
       (object) => {
         scene.remove(placeholderBox);
-        object.position.set(0, 0, 0);
-        object.scale.setScalar(0.01); // fbx 스케일이 크게 나오면 조정하세요
         scene.add(object);
+
+        // fbx 원본 스케일을 모르기 때문에, 실제 크기를 측정해서
+        // 사람 키 정도(1.8 유닛)에 맞춰 자동으로 스케일을 계산한다.
+        const box = new THREE.Box3().setFromObject(object);
+        const size = box.getSize(new THREE.Vector3());
+        const desiredHeight = 1.8;
+        const scale = size.y > 0.0001 ? desiredHeight / size.y : 1;
+        object.scale.setScalar(scale);
+
+        // 스케일 적용 후 다시 측정해서 중심을 (x,z)=0 에, 발을 y=0 바닥에 맞춘다.
+        const scaledBox = new THREE.Box3().setFromObject(object);
+        const center = scaledBox.getCenter(new THREE.Vector3());
+        object.position.x -= center.x;
+        object.position.z -= center.z;
+        object.position.y -= scaledBox.min.y;
+
         controllable = object;
         previousControllablePosition.copy(object.position);
+
+        modelStatus = "로드 완료";
+        console.log(
+          `ch.fbx 로드 완료 (원본 크기: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)}, 적용 스케일: ${scale.toFixed(4)})`
+        );
       },
-      undefined,
-      () => {
-        console.log("models/ch.fbx가 아직 없어서 임시 박스를 표시합니다.");
+      (xhr) => {
+        if (xhr.lengthComputable) {
+          modelStatus = `로딩 중... ${((xhr.loaded / xhr.total) * 100).toFixed(0)}%`;
+        }
+      },
+      (error) => {
+        modelStatus = "로드 실패 (콘솔 확인)";
+        console.error("ch.fbx 로드 실패:", error);
       }
     );
 
@@ -254,7 +279,8 @@
       const cameraModeLabel = activeCamera === characterCamera ? "캐릭터 카메라" : "월드 카메라";
       debugHud.textContent =
         `캐릭터 위치: ${formatVector(controllable.position)}\n` +
-        `카메라 위치: ${formatVector(characterCamera.position)} (${cameraModeLabel})`;
+        `카메라 위치: ${formatVector(characterCamera.position)} (${cameraModeLabel})\n` +
+        `모델 상태: ${modelStatus}`;
     }
 
     // 창 크기 변경 대응
