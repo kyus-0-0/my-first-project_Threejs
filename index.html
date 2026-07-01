@@ -75,6 +75,9 @@
     placeholderBox.position.set(0, 0.5, 0); // 바닥(y=0)에 발이 닿도록 배치
     scene.add(placeholderBox);
 
+    // WASD / 방향키로 움직일 대상 (fbx 로딩 전까지는 임시 박스)
+    let controllable = placeholderBox;
+
     // models/ch.fbx 가 저장소에 올라오면 자동으로 불러와 임시 박스 자리에 표시
     const fbxLoader = new FBXLoader();
     fbxLoader.load(
@@ -84,6 +87,7 @@
         object.position.set(0, 0, 0);
         object.scale.setScalar(0.01); // fbx 스케일이 크게 나오면 조정하세요
         scene.add(object);
+        controllable = object;
       },
       undefined,
       () => {
@@ -95,6 +99,42 @@
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
 
+    // WASD / 방향키 이동 처리
+    const keysPressed = {};
+    const moveKeys = new Set([
+      "w", "a", "s", "d",
+      "arrowup", "arrowdown", "arrowleft", "arrowright",
+    ]);
+    window.addEventListener("keydown", (e) => {
+      const key = e.key.toLowerCase();
+      if (moveKeys.has(key)) e.preventDefault();
+      keysPressed[key] = true;
+    });
+    window.addEventListener("keyup", (e) => {
+      keysPressed[e.key.toLowerCase()] = false;
+    });
+
+    const moveSpeed = 3; // 초당 이동 거리 (단위: three.js 월드 유닛)
+
+    function updateMovement(delta) {
+      let moveX = 0;
+      let moveZ = 0;
+      if (keysPressed["w"] || keysPressed["arrowup"]) moveZ -= 1;
+      if (keysPressed["s"] || keysPressed["arrowdown"]) moveZ += 1;
+      if (keysPressed["a"] || keysPressed["arrowleft"]) moveX -= 1;
+      if (keysPressed["d"] || keysPressed["arrowright"]) moveX += 1;
+
+      if (moveX === 0 && moveZ === 0) return;
+
+      const length = Math.hypot(moveX, moveZ);
+      moveX /= length;
+      moveZ /= length;
+
+      controllable.position.x += moveX * moveSpeed * delta;
+      controllable.position.z += moveZ * moveSpeed * delta;
+      controllable.rotation.y = Math.atan2(moveX, moveZ);
+    }
+
     // 창 크기 변경 대응
     window.addEventListener("resize", () => {
       camera.aspect = window.innerWidth / window.innerHeight;
@@ -103,8 +143,11 @@
     });
 
     // 렌더 루프
+    const clock = new THREE.Clock();
     function animate() {
       requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+      updateMovement(delta);
       controls.update();
       renderer.render(scene, camera);
     }
