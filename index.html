@@ -336,6 +336,9 @@
     // 카메라 컨트롤 (카메라별로 따로 두고, 활성화된 것만 사용)
     const characterControls = new OrbitControls(characterCamera, renderer.domElement);
     characterControls.enableDamping = true;
+    // 위/아래로 너무 많이 돌리면 캐릭터가 화면 밖으로 나가버리니 각도를 좁게 제한
+    characterControls.minPolarAngle = Math.PI / 2 - 0.35; // 위쪽 한계 (수평 기준 ±20도)
+    characterControls.maxPolarAngle = Math.PI / 2 + 0.35; // 아래쪽 한계
 
     const worldControls = new OrbitControls(worldCamera, renderer.domElement);
     worldControls.enableDamping = true;
