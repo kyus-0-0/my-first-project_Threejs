@@ -47,7 +47,7 @@
 </head>
 <body>
   <div id="debug-hud"></div>
-  <div id="space-hint">스페이스바를 눌러 시작하세요</div>
+  <div id="space-hint">스페이스바 또는 화면을 눌러 시작하세요</div>
   <script type="importmap">
     {
       "imports": {
@@ -178,6 +178,16 @@
       debugHud.style.display = "block";
       for (const key of Object.keys(keysPressed)) keysPressed[key] = false;
     }
+
+    function tryStartGame() {
+      if (appState === "intro" && introReadyForSpace) startGame();
+    }
+
+    // 모바일에는 키보드가 없어서 스페이스바를 누를 수 없으니, 화면을
+    // 탭/클릭해도 시작하게 한다 (기기 구분 없이 둘 다 항상 지원).
+    window.addEventListener("pointerdown", () => {
+      tryStartGame();
+    });
 
     // 이동이 잘 되는지 눈으로 확인하기 쉽도록 바둑판(체크판) 패턴 텍스처 생성
     function createCheckerTexture(colorA = "#aaaaaa", colorB = "#777777") {
@@ -397,7 +407,7 @@
       if (appState === "intro") {
         if (e.code === "Space" || e.key === " ") {
           e.preventDefault();
-          if (introReadyForSpace) startGame();
+          tryStartGame();
         }
         return; // 인트로 중에는 이동/카메라 전환 키를 무시한다
       }
