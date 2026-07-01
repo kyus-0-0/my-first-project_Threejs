@@ -74,7 +74,7 @@
       0.1,
       1000
     );
-    characterCamera.position.set(0, 2.2, -4); // 캐릭터 뒤쪽에서 시작
+    characterCamera.position.set(0, 3.2, -4); // 캐릭터 뒤쪽에서 시작
 
     // 전체를 내려다보는 월드(관전) 카메라
     const worldCamera = new THREE.PerspectiveCamera(
@@ -370,10 +370,13 @@
     const characterControls = new OrbitControls(characterCamera, renderer.domElement);
     characterControls.enableDamping = true;
     // 위/아래로 너무 많이 돌리면 캐릭터가 화면 밖으로 나가버리니 각도를 좁게 제한
-    const verticalOrbitLimitUp = THREE.MathUtils.degToRad(15); // 수평 기준 위쪽 15도
+    const verticalOrbitLimitUp = THREE.MathUtils.degToRad(25); // 수평 기준 위쪽 25도 (카메라를 높였더니 15도 범위를 벗어나서 넉넉하게 조정)
     const verticalOrbitLimitDown = THREE.MathUtils.degToRad(5); // 수평 기준 아래쪽 5도
     characterControls.minPolarAngle = Math.PI / 2 - verticalOrbitLimitUp;
     characterControls.maxPolarAngle = Math.PI / 2 + verticalOrbitLimitDown;
+    // 마우스 휠 줌 범위: 캐릭터와의 거리 1(최소) ~ 5(최대)
+    characterControls.minDistance = 1;
+    characterControls.maxDistance = 5;
 
     const worldControls = new OrbitControls(worldCamera, renderer.domElement);
     worldControls.enableDamping = true;
