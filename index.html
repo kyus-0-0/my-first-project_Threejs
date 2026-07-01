@@ -74,7 +74,7 @@
       0.1,
       1000
     );
-    characterCamera.position.set(0, 3.2, -4); // 캐릭터 뒤쪽에서 시작
+    characterCamera.position.set(0, 4.2, -4); // 캐릭터 뒤쪽에서 시작
 
     // 전체를 내려다보는 월드(관전) 카메라
     const worldCamera = new THREE.PerspectiveCamera(
@@ -172,15 +172,50 @@
       }
     }
 
-    function startGame() {
-      appState = "game";
+    // 스페이스바/탭으로 시작한 직후 그 입력이 그대로 지면 클릭(이동)으로
+    // 이어지는 걸 막기 위해, 곧바로 "game" 상태로 가지 않고
+    // "spawn"(스폰 연출) 상태를 한 번 거친다. spawn 동안은 이동/카메라 전환/
+    // 지면 클릭이 전부 무시된다.
+    const spawnMarker = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 24, 24),
+      new THREE.MeshBasicMaterial({ color: 0x22cc44 })
+    );
+    spawnMarker.visible = false;
+    scene.add(spawnMarker);
+
+    const spawnDuration = 2; // 초
+    const spawnMaxScale = 3;
+    let spawnElapsed = 0;
+
+    function beginSpawnSequence() {
+      appState = "spawn";
       spaceHint.style.display = "none";
+      spawnElapsed = 0;
+      spawnMarker.position.set(0, 0, 0);
+      spawnMarker.scale.setScalar(0.0001);
+      spawnMarker.visible = true;
+      controllable.visible = false; // 스폰 연출이 끝나기 전까지 캐릭터(임시 박스 포함)를 숨긴다
+    }
+
+    function updateSpawnSequence(delta) {
+      spawnElapsed += delta;
+      const t = Math.min(spawnElapsed / spawnDuration, 1);
+      spawnMarker.scale.setScalar(spawnMaxScale * t);
+      if (t >= 1) {
+        spawnMarker.visible = false;
+        controllable.visible = true;
+        finishStartingGame();
+      }
+    }
+
+    function finishStartingGame() {
+      appState = "game";
       debugHud.style.display = "block";
       for (const key of Object.keys(keysPressed)) keysPressed[key] = false;
     }
 
     function tryStartGame() {
-      if (appState === "intro" && introReadyForSpace) startGame();
+      if (appState === "intro" && introReadyForSpace) beginSpawnSequence();
     }
 
     // 모바일에는 키보드가 없어서 스페이스바를 누를 수 없으니, 화면을
@@ -370,13 +405,13 @@
     const characterControls = new OrbitControls(characterCamera, renderer.domElement);
     characterControls.enableDamping = true;
     // 위/아래로 너무 많이 돌리면 캐릭터가 화면 밖으로 나가버리니 각도를 좁게 제한
-    const verticalOrbitLimitUp = THREE.MathUtils.degToRad(25); // 수평 기준 위쪽 25도 (카메라를 높였더니 15도 범위를 벗어나서 넉넉하게 조정)
+    const verticalOrbitLimitUp = THREE.MathUtils.degToRad(35); // 수평 기준 위쪽 35도 (카메라를 더 높였더니 이전 범위를 벗어나서 넉넉하게 조정)
     const verticalOrbitLimitDown = THREE.MathUtils.degToRad(5); // 수평 기준 아래쪽 5도
     characterControls.minPolarAngle = Math.PI / 2 - verticalOrbitLimitUp;
     characterControls.maxPolarAngle = Math.PI / 2 + verticalOrbitLimitDown;
-    // 마우스 휠 줌 범위: 캐릭터와의 거리 1(최소) ~ 5(최대)
-    characterControls.minDistance = 1;
-    characterControls.maxDistance = 5;
+    // 마우스 휠 줌 범위: 캐릭터와의 거리 2.5(최소) ~ 10(최대)
+    characterControls.minDistance = 2.5;
+    characterControls.maxDistance = 10;
 
     const worldControls = new OrbitControls(worldCamera, renderer.domElement);
     worldControls.enableDamping = true;
@@ -407,13 +442,11 @@
       "arrowup", "arrowdown", "arrowleft", "arrowright",
     ]);
     window.addEventListener("keydown", (e) => {
-      if (appState === "intro") {
-        if (e.code === "Space" || e.key === " ") {
-          e.preventDefault();
-          tryStartGame();
-        }
-        return; // 인트로 중에는 이동/카메라 전환 키를 무시한다
+      if (e.code === "Space" || e.key === " ") {
+        if (appState === "intro") e.preventDefault();
+        tryStartGame();
       }
+      if (appState !== "game") return; // 인트로/스폰 연출 중에는 이동/카메라 전환 키를 무시한다
 
       const key = e.key.toLowerCase();
       if (moveKeys.has(key)) e.preventDefault();
@@ -534,6 +567,14 @@
       if (appState === "intro") {
         updateIntro(delta);
         renderer.render(introScene, introCamera);
+        return;
+      }
+
+      if (appState === "spawn") {
+        updateSpawnSequence(delta);
+        updateCameraFollow();
+        activeControls.update();
+        renderer.render(scene, activeCamera);
         return;
       }
 
