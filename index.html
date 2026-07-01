@@ -61,9 +61,30 @@
     renderer.setPixelRatio(window.devicePixelRatio);
     document.body.appendChild(renderer.domElement);
 
-    // 지면(바닥)
+    // 이동이 잘 되는지 눈으로 확인하기 쉽도록 바둑판(체크판) 패턴 텍스처 생성
+    function createCheckerTexture(colorA = "#aaaaaa", colorB = "#777777") {
+      const size = 64;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = colorA;
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = colorB;
+      ctx.fillRect(0, 0, size / 2, size / 2);
+      ctx.fillRect(size / 2, size / 2, size / 2, size / 2);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.magFilter = THREE.NearestFilter;
+      return texture;
+    }
+
+    // 지면(바닥) - 한 칸이 1 x 1 유닛이 되도록 반복 횟수 설정 (50 유닛 / 2 유닛 타일 = 25)
     const groundGeometry = new THREE.PlaneGeometry(50, 50);
-    const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x999999 });
+    const checkerTexture = createCheckerTexture();
+    checkerTexture.repeat.set(25, 25);
+    const groundMaterial = new THREE.MeshStandardMaterial({ map: checkerTexture });
     const ground = new THREE.Mesh(groundGeometry, groundMaterial);
     ground.rotation.x = -Math.PI / 2;
     scene.add(ground);
@@ -159,24 +180,36 @@
     });
 
     const moveSpeed = 3; // 초당 이동 거리 (단위: three.js 월드 유닛)
+    const worldUp = new THREE.Vector3(0, 1, 0);
+    const cameraForward = new THREE.Vector3();
+    const cameraRight = new THREE.Vector3();
+    const moveDirection = new THREE.Vector3();
 
+    // 캐릭터 카메라가 바라보는 방향을 기준으로 이동시킨다.
+    // (W = 화면 안쪽, D = 화면 오른쪽 처럼 항상 화면 기준과 일치하게 하기 위함)
     function updateMovement(delta) {
-      let moveX = 0;
-      let moveZ = 0;
-      if (keysPressed["w"] || keysPressed["arrowup"]) moveZ -= 1;
-      if (keysPressed["s"] || keysPressed["arrowdown"]) moveZ += 1;
-      if (keysPressed["a"] || keysPressed["arrowleft"]) moveX -= 1;
-      if (keysPressed["d"] || keysPressed["arrowright"]) moveX += 1;
+      let inputX = 0;
+      let inputZ = 0;
+      if (keysPressed["w"] || keysPressed["arrowup"]) inputZ += 1;
+      if (keysPressed["s"] || keysPressed["arrowdown"]) inputZ -= 1;
+      if (keysPressed["a"] || keysPressed["arrowleft"]) inputX -= 1;
+      if (keysPressed["d"] || keysPressed["arrowright"]) inputX += 1;
 
-      if (moveX === 0 && moveZ === 0) return;
+      if (inputX === 0 && inputZ === 0) return;
 
-      const length = Math.hypot(moveX, moveZ);
-      moveX /= length;
-      moveZ /= length;
+      characterCamera.getWorldDirection(cameraForward);
+      cameraForward.y = 0;
+      cameraForward.normalize();
+      cameraRight.crossVectors(cameraForward, worldUp).normalize();
 
-      controllable.position.x += moveX * moveSpeed * delta;
-      controllable.position.z += moveZ * moveSpeed * delta;
-      controllable.rotation.y = Math.atan2(moveX, moveZ);
+      moveDirection
+        .set(0, 0, 0)
+        .addScaledVector(cameraForward, inputZ)
+        .addScaledVector(cameraRight, inputX)
+        .normalize();
+
+      controllable.position.addScaledVector(moveDirection, moveSpeed * delta);
+      controllable.rotation.y = Math.atan2(moveDirection.x, moveDirection.z);
     }
 
     // 캐릭터가 이동한 만큼 캐릭터 카메라도 같이 이동시켜서, 마우스로 맞춰둔
