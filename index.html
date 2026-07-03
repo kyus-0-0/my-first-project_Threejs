@@ -396,7 +396,7 @@
     directionalLight.position.set(5, 10, 7);
     scene.add(directionalLight);
 
-    // ch.fbx가 아직 없을 때 (0,0,0) 위치를 표시해주는 임시 박스
+    // ch_02.fbx가 아직 없을 때 (0,0,0) 위치를 표시해주는 임시 박스
     const placeholderBox = new THREE.Mesh(
       new THREE.BoxGeometry(1, 1, 1),
       new THREE.MeshStandardMaterial({ color: 0x4488ff, wireframe: true })
@@ -407,12 +407,12 @@
     // WASD / 방향키로 움직일 대상 (fbx 로딩 전까지는 임시 박스)
     let controllable = placeholderBox;
 
-    // models/ch.fbx 가 저장소에 올라오면 자동으로 불러와 임시 박스 자리에 표시
+    // models/ch_02.fbx 가 저장소에 올라오면 자동으로 불러와 임시 박스 자리에 표시
     let modelStatus = "로딩 중...";
     const textureLoader = new THREE.TextureLoader();
     const fbxLoader = new FBXLoader();
     fbxLoader.load(
-      "./models/ch.fbx",
+      "./models/ch_02.fbx",
       (object) => {
         scene.remove(placeholderBox);
         scene.add(object);
@@ -437,7 +437,7 @@
 
         // 업로드된 텍스처를 캐릭터 메시에 입힌다.
         textureLoader.load(
-          "./models/texture/ch_map_01.jpg",
+          "./models/texture/ch_map_02.jpeg",
           (texture) => {
             texture.colorSpace = THREE.SRGBColorSpace;
             texture.flipY = false; // fbx는 이미지 UV 원점이 반대라 FBXLoader와 동일하게 맞춰준다
@@ -449,17 +449,17 @@
                 mat.needsUpdate = true;
               }
             });
-            console.log("ch_map_01.jpg 텍스처 적용 완료");
+            console.log("ch_map_02.jpeg 텍스처 적용 완료");
           },
           undefined,
           (error) => {
-            console.error("ch_map_01.jpg 텍스처 로드 실패:", error);
+            console.error("ch_map_02.jpeg 텍스처 로드 실패:", error);
           }
         );
 
         modelStatus = "로드 완료";
         console.log(
-          `ch.fbx 로드 완료 (원본 크기: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)}, 적용 스케일: ${scale.toFixed(4)})`
+          `ch_02.fbx 로드 완료 (원본 크기: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)}, 적용 스케일: ${scale.toFixed(4)})`
         );
       },
       (xhr) => {
@@ -469,7 +469,7 @@
       },
       (error) => {
         modelStatus = "로드 실패 (콘솔 확인)";
-        console.error("ch.fbx 로드 실패:", error);
+        console.error("ch_02.fbx 로드 실패:", error);
       }
     );
 
