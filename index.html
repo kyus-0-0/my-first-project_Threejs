@@ -526,7 +526,7 @@
           "./models/texture/ch_map_02.jpg",
           (texture) => {
             texture.colorSpace = THREE.SRGBColorSpace;
-            texture.flipY = false; // fbx는 이미지 UV 원점이 반대라 FBXLoader와 동일하게 맞춰준다
+            texture.flipY = true; // V 반전 상태가 정상으로 확인되어 기본값으로 사용
             characterTexture = texture;
 
             characterTextureFlipU = texture.clone();
