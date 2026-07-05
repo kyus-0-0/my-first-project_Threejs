@@ -452,27 +452,45 @@
       return texture;
     }
     const uvCheckerTexture = createUVCheckerTexture();
-    let characterTexture = null;
+    let characterTexture = null; // 원본(정상) 텍스처
+    let characterTextureFlipU = null; // U 방향으로 뒤집은 버전
+    let characterTextureFlipV = null; // V 방향으로 뒤집은 버전
     let characterMaterials = [];
-    let showUVChecker = false;
 
-    function toggleUVChecker() {
+    // UV 버튼/"u" 키를 누를 때마다 4단계로 순환: UV 체크 → U 반전 → V 반전 → 원본
+    const textureModes = ["uvChecker", "flipU", "flipV", "normal"];
+    let textureModeIndex = -1; // -1 = 아직 한 번도 누르기 전(=원본 상태와 동일)
+
+    function applyTextureMode() {
       if (!characterTexture) return;
-      showUVChecker = !showUVChecker;
+      const mode = textureModeIndex === -1 ? "normal" : textureModes[textureModeIndex];
+      const mapByMode = {
+        uvChecker: uvCheckerTexture,
+        flipU: characterTextureFlipU,
+        flipV: characterTextureFlipV,
+        normal: characterTexture,
+      };
+      const map = mapByMode[mode];
       for (const mat of characterMaterials) {
-        mat.map = showUVChecker ? uvCheckerTexture : characterTexture;
+        mat.map = map;
         mat.needsUpdate = true;
       }
-      console.log(showUVChecker ? "UV 체크 텍스처로 전환" : "원래 텍스처로 복귀");
+      console.log(`텍스처 확인 모드: ${mode}`);
     }
 
-    // 모바일에는 키보드가 없어서 "u" 키를 못 누르니, 버튼으로도 전환할 수 있게 한다.
+    function cycleTextureMode() {
+      if (!characterTexture) return;
+      textureModeIndex = (textureModeIndex + 1) % textureModes.length;
+      applyTextureMode();
+    }
+
+    // 모바일에는 키보드가 없어서 "u" 키를 못 누르니, 버튼으로도 순환할 수 있게 한다.
     const uvCheckerBtn = document.getElementById("uv-checker-btn");
     uvCheckerBtn.addEventListener("pointerdown", (e) => {
       e.stopPropagation();
     });
     uvCheckerBtn.addEventListener("click", () => {
-      toggleUVChecker();
+      cycleTextureMode();
     });
 
     // models/ch_02.fbx 가 저장소에 올라오면 자동으로 불러와 임시 박스 자리에 표시
@@ -510,17 +528,29 @@
             texture.colorSpace = THREE.SRGBColorSpace;
             texture.flipY = false; // fbx는 이미지 UV 원점이 반대라 FBXLoader와 동일하게 맞춰준다
             characterTexture = texture;
+
+            characterTextureFlipU = texture.clone();
+            characterTextureFlipU.wrapS = THREE.RepeatWrapping;
+            characterTextureFlipU.repeat.x = -1;
+            characterTextureFlipU.offset.x = 1;
+            characterTextureFlipU.needsUpdate = true;
+
+            characterTextureFlipV = texture.clone();
+            characterTextureFlipV.wrapT = THREE.RepeatWrapping;
+            characterTextureFlipV.repeat.y = -1;
+            characterTextureFlipV.offset.y = 1;
+            characterTextureFlipV.needsUpdate = true;
+
             characterMaterials = [];
             object.traverse((child) => {
               if (!child.isMesh) return;
               const materials = Array.isArray(child.material) ? child.material : [child.material];
               for (const mat of materials) {
-                mat.map = showUVChecker ? uvCheckerTexture : texture;
-                mat.needsUpdate = true;
                 characterMaterials.push(mat);
               }
             });
-            console.log("ch_map_02.jpg 텍스처 적용 완료 ('u' 키로 UV 체크 텍스처와 전환 가능)");
+            applyTextureMode();
+            console.log("ch_map_02.jpg 텍스처 적용 완료 ('u' 키 또는 UV 버튼으로 확인 모드 순환 가능)");
           },
           undefined,
           (error) => {
@@ -608,7 +638,7 @@
       }
 
       if (key === "u") {
-        toggleUVChecker();
+        cycleTextureMode();
       }
     });
     window.addEventListener("keyup", (e) => {
