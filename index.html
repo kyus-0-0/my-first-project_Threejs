@@ -407,6 +407,48 @@
     // WASD / 방향키로 움직일 대상 (fbx 로딩 전까지는 임시 박스)
     let controllable = placeholderBox;
 
+    // UV가 제대로 펴져 있는지 눈으로 확인하기 위한 디버그용 체크 텍스처.
+    // 실제 텍스처가 이상하게 보일 때 "u" 키로 이걸로 바꿔보면, UV 자체가
+    // 꼬여있는 건지(격자 무늬가 조각조각 흩어져 보임) 아니면 텍스처 이미지
+    // 자체 문제인지 구분할 수 있다.
+    function createUVCheckerTexture() {
+      const size = 512;
+      const cells = 16;
+      const cellSize = size / cells;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      for (let i = 0; i < cells; i++) {
+        for (let j = 0; j < cells; j++) {
+          const hue = (i / cells) * 360;
+          const light = 35 + (j / cells) * 45;
+          ctx.fillStyle = `hsl(${hue}, 85%, ${light}%)`;
+          ctx.fillRect(i * cellSize, j * cellSize, cellSize, cellSize);
+        }
+      }
+      ctx.strokeStyle = "rgba(0,0,0,0.6)";
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= cells; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * cellSize, 0);
+        ctx.lineTo(i * cellSize, size);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, i * cellSize);
+        ctx.lineTo(size, i * cellSize);
+        ctx.stroke();
+      }
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.flipY = false;
+      return texture;
+    }
+    const uvCheckerTexture = createUVCheckerTexture();
+    let characterTexture = null;
+    let characterMaterials = [];
+    let showUVChecker = false;
+
     // models/ch_02.fbx 가 저장소에 올라오면 자동으로 불러와 임시 박스 자리에 표시
     let modelStatus = "로딩 중...";
     const textureLoader = new THREE.TextureLoader();
@@ -441,15 +483,18 @@
           (texture) => {
             texture.colorSpace = THREE.SRGBColorSpace;
             texture.flipY = false; // fbx는 이미지 UV 원점이 반대라 FBXLoader와 동일하게 맞춰준다
+            characterTexture = texture;
+            characterMaterials = [];
             object.traverse((child) => {
               if (!child.isMesh) return;
               const materials = Array.isArray(child.material) ? child.material : [child.material];
               for (const mat of materials) {
-                mat.map = texture;
+                mat.map = showUVChecker ? uvCheckerTexture : texture;
                 mat.needsUpdate = true;
+                characterMaterials.push(mat);
               }
             });
-            console.log("ch_map_02.jpg 텍스처 적용 완료");
+            console.log("ch_map_02.jpg 텍스처 적용 완료 ('u' 키로 UV 체크 텍스처와 전환 가능)");
           },
           undefined,
           (error) => {
@@ -534,6 +579,15 @@
 
       if (e.key === "[") {
         setCameraMode(activeCamera === characterCamera ? "world" : "character");
+      }
+
+      if (key === "u" && characterTexture) {
+        showUVChecker = !showUVChecker;
+        for (const mat of characterMaterials) {
+          mat.map = showUVChecker ? uvCheckerTexture : characterTexture;
+          mat.needsUpdate = true;
+        }
+        console.log(showUVChecker ? "UV 체크 텍스처로 전환" : "원래 텍스처로 복귀");
       }
     });
     window.addEventListener("keyup", (e) => {
