@@ -414,6 +414,19 @@
     // WASD / 방향키로 움직일 대상 (fbx 로딩 전까지는 임시 박스)
     let controllable = placeholderBox;
 
+    // 캐릭터 애니메이션 (idle / 4방향 walk). ch_02.fbx 로드가 끝나야 채워진다.
+    let mixer = null;
+    const actions = {};
+    let currentAction = null;
+
+    function fadeToAction(action, duration = 0.2) {
+      if (!action || action === currentAction) return;
+      const previous = currentAction;
+      currentAction = action;
+      action.reset().fadeIn(duration).play();
+      if (previous) previous.fadeOut(duration);
+    }
+
     // UV가 제대로 펴져 있는지 눈으로 확인하기 위한 디버그용 체크 텍스처.
     // 실제 텍스처가 이상하게 보일 때 "u" 키로 이걸로 바꿔보면, UV 자체가
     // 꼬여있는 건지(격자 무늬가 조각조각 흩어져 보임) 아니면 텍스처 이미지
@@ -499,7 +512,7 @@
     const fbxLoader = new FBXLoader();
     fbxLoader.load(
       "./models/ch_02.fbx",
-      (object) => {
+      async (object) => {
         scene.remove(placeholderBox);
         scene.add(object);
 
@@ -562,6 +575,31 @@
         console.log(
           `ch_02.fbx 로드 완료 (원본 크기: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)}, 적용 스케일: ${scale.toFixed(4)})`
         );
+
+        // idle / 4방향 walk 애니메이션을 각각 별도 fbx에서 불러와 같은 스켈레톤에 적용한다.
+        try {
+          const [idleFbx, walkFwdFbx, walkBackFbx, walkLeftFbx, walkRightFbx] = await Promise.all([
+            fbxLoader.loadAsync("./models/ani/ch_02_idle.FBX"),
+            fbxLoader.loadAsync("./models/ani/ch_02_walk_fwd.FBX"),
+            fbxLoader.loadAsync("./models/ani/ch_02_walk_bwd.FBX"),
+            fbxLoader.loadAsync("./models/ani/ch_02_walk_left.FBX"),
+            fbxLoader.loadAsync("./models/ani/ch_02_walk_right.FBX"),
+          ]);
+
+          mixer = new THREE.AnimationMixer(object);
+          actions.idle = mixer.clipAction(idleFbx.animations[0]);
+          actions.walkForward = mixer.clipAction(walkFwdFbx.animations[0]);
+          actions.walkBackward = mixer.clipAction(walkBackFbx.animations[0]);
+          actions.walkLeft = mixer.clipAction(walkLeftFbx.animations[0]);
+          actions.walkRight = mixer.clipAction(walkRightFbx.animations[0]);
+
+          currentAction = actions.idle;
+          currentAction.play();
+
+          console.log("캐릭터 애니메이션 5종(idle/walk x4) 로드 완료");
+        } catch (err) {
+          console.error("캐릭터 애니메이션 로드 실패:", err);
+        }
       },
       (xhr) => {
         if (xhr.lengthComputable) {
@@ -663,7 +701,11 @@
 
       if (inputX === 0 && inputZ === 0) {
         // WASD 입력이 없으면 클릭으로 지정해둔 목표 지점을 향해 이동한다.
-        if (moveTarget) moveTowardClickTarget(delta);
+        if (moveTarget) {
+          moveTowardClickTarget(delta);
+        } else {
+          fadeToAction(actions.idle);
+        }
         return;
       }
 
@@ -684,7 +726,16 @@
         .normalize();
 
       controllable.position.addScaledVector(moveDirection, moveSpeed * delta);
-      controllable.rotation.y = Math.atan2(moveDirection.x, moveDirection.z);
+
+      // 캐릭터는 항상 카메라가 보는 방향을 바라본 채로 유지하고(더 이상 좌우로
+      // 돌아보지 않는다), 대신 눌린 방향에 맞는 걷기 애니메이션(전/후/좌/우)으로
+      // 이동 방향을 표현한다.
+      controllable.rotation.y = Math.atan2(cameraForward.x, cameraForward.z);
+
+      if (inputZ > 0) fadeToAction(actions.walkForward);
+      else if (inputZ < 0) fadeToAction(actions.walkBackward);
+      else if (inputX > 0) fadeToAction(actions.walkRight);
+      else if (inputX < 0) fadeToAction(actions.walkLeft);
     }
 
     // 클릭으로 지정한 지점(moveTarget)을 향해 일정한 속도로 스무스하게 이동시킨다.
@@ -696,12 +747,14 @@
       const arriveThreshold = 0.05;
       if (distance <= arriveThreshold) {
         moveTarget = null;
+        fadeToAction(actions.idle);
         return;
       }
       const step = Math.min(distance, moveSpeed * delta);
       toClickTarget.normalize();
       controllable.position.addScaledVector(toClickTarget, step);
       controllable.rotation.y = Math.atan2(toClickTarget.x, toClickTarget.z);
+      fadeToAction(actions.walkForward);
     }
 
     // 캐릭터가 이동한 만큼 캐릭터 카메라도 같이 이동시켜서, 마우스로 맞춰둔
@@ -739,6 +792,8 @@
     function animate() {
       requestAnimationFrame(animate);
       const delta = clock.getDelta();
+
+      if (mixer) mixer.update(delta);
 
       if (appState === "intro") {
         updateIntro(delta);
