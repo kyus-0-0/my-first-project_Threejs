@@ -54,7 +54,8 @@
       display: none;
     }
     #fullscreen-btn,
-    #uv-checker-btn {
+    #uv-checker-btn,
+    #anim-debug-btn {
       position: absolute;
       top: 8px;
       z-index: 20;
@@ -74,6 +75,9 @@
     #uv-checker-btn {
       right: 56px;
     }
+    #anim-debug-btn {
+      right: 104px;
+    }
   </style>
 </head>
 <body>
@@ -82,6 +86,7 @@
     <div id="space-hint">스페이스바 또는 화면을 눌러 시작하세요</div>
     <button id="fullscreen-btn" aria-label="전체화면 전환">⛶</button>
     <button id="uv-checker-btn" aria-label="UV 체크 텍스처 전환">UV</button>
+    <button id="anim-debug-btn" aria-label="애니메이션 확인 모드 전환">A</button>
   </div>
   <script type="importmap">
     {
@@ -427,6 +432,38 @@
       if (previous) previous.fadeOut(duration);
     }
 
+    // 애니메이션 확인용 "A" 버튼: 누를 때마다 7단계로 순환한다.
+    // 기본(자동) → 없음 → idle → 앞 → 뒤 → 왼쪽 → 오른쪽 → 다시 기본(자동)
+    // "기본(자동)"이 아닌 동안에는 updateMovement/moveTowardClickTarget이
+    // 자동으로 애니메이션을 바꾸지 않고, 여기서 고른 애니메이션만 유지된다.
+    const animDebugModes = ["normal", "none", "idle", "walkForward", "walkBackward", "walkLeft", "walkRight"];
+    let animDebugModeIndex = 0;
+
+    function applyAnimDebugMode() {
+      const mode = animDebugModes[animDebugModeIndex];
+      console.log(`애니메이션 확인 모드: ${mode}`);
+      if (mode === "normal" || !mixer) return;
+      if (mode === "none") {
+        for (const action of Object.values(actions)) action.stop();
+        currentAction = null;
+        return;
+      }
+      fadeToAction(actions[mode]);
+    }
+
+    function cycleAnimDebugMode() {
+      animDebugModeIndex = (animDebugModeIndex + 1) % animDebugModes.length;
+      applyAnimDebugMode();
+    }
+
+    const animDebugBtn = document.getElementById("anim-debug-btn");
+    animDebugBtn.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+    });
+    animDebugBtn.addEventListener("click", () => {
+      cycleAnimDebugMode();
+    });
+
     // UV가 제대로 펴져 있는지 눈으로 확인하기 위한 디버그용 체크 텍스처.
     // 실제 텍스처가 이상하게 보일 때 "u" 키로 이걸로 바꿔보면, UV 자체가
     // 꼬여있는 건지(격자 무늬가 조각조각 흩어져 보임) 아니면 텍스처 이미지
@@ -703,7 +740,7 @@
         // WASD 입력이 없으면 클릭으로 지정해둔 목표 지점을 향해 이동한다.
         if (moveTarget) {
           moveTowardClickTarget(delta);
-        } else {
+        } else if (animDebugModeIndex === 0) {
           fadeToAction(actions.idle);
         }
         return;
@@ -732,10 +769,12 @@
       // 이동 방향을 표현한다.
       controllable.rotation.y = Math.atan2(cameraForward.x, cameraForward.z);
 
-      if (inputZ > 0) fadeToAction(actions.walkForward);
-      else if (inputZ < 0) fadeToAction(actions.walkBackward);
-      else if (inputX > 0) fadeToAction(actions.walkRight);
-      else if (inputX < 0) fadeToAction(actions.walkLeft);
+      if (animDebugModeIndex === 0) {
+        if (inputZ > 0) fadeToAction(actions.walkForward);
+        else if (inputZ < 0) fadeToAction(actions.walkBackward);
+        else if (inputX > 0) fadeToAction(actions.walkRight);
+        else if (inputX < 0) fadeToAction(actions.walkLeft);
+      }
     }
 
     // 클릭으로 지정한 지점(moveTarget)을 향해 일정한 속도로 스무스하게 이동시킨다.
@@ -747,14 +786,14 @@
       const arriveThreshold = 0.05;
       if (distance <= arriveThreshold) {
         moveTarget = null;
-        fadeToAction(actions.idle);
+        if (animDebugModeIndex === 0) fadeToAction(actions.idle);
         return;
       }
       const step = Math.min(distance, moveSpeed * delta);
       toClickTarget.normalize();
       controllable.position.addScaledVector(toClickTarget, step);
       controllable.rotation.y = Math.atan2(toClickTarget.x, toClickTarget.z);
-      fadeToAction(actions.walkForward);
+      if (animDebugModeIndex === 0) fadeToAction(actions.walkForward);
     }
 
     // 캐릭터가 이동한 만큼 캐릭터 카메라도 같이 이동시켜서, 마우스로 맞춰둔
