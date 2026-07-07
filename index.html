@@ -902,11 +902,40 @@
     const previousControllablePosition = controllable.position.clone();
     const cameraLookOffset = new THREE.Vector3(0, 1.6, 0); // 캐릭터 머리 높이 정도를 바라봄 (캐릭터 키 1.8 기준)
 
-    function updateCameraFollow() {
+    // 지면 클릭 이동 중에는 카메라가 캐릭터 등 뒤로 부드럽게 따라 돌게 한다
+    // (거리/피치는 그대로 두고 좌우 각도만 보정). 값이 클수록 더 빨리 따라붙는다.
+    const cameraFollowRotationSpeed = 3;
+    const cameraOffsetTemp = new THREE.Vector3();
+
+    function rotateCameraBehindCharacter(delta) {
+      const offset = cameraOffsetTemp.copy(characterCamera.position).sub(characterControls.target);
+      const horizontalRadius = Math.hypot(offset.x, offset.z);
+      if (horizontalRadius < 0.0001) return;
+
+      const currentAzimuth = Math.atan2(offset.x, offset.z);
+      const desiredAzimuth = controllable.rotation.y + Math.PI; // 카메라는 캐릭터 등 뒤(정면 반대편)에 있어야 한다
+
+      let diff = desiredAzimuth - currentAzimuth;
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff)); // 최단 방향(-π~π)으로 정규화
+
+      const turnRate = 1 - Math.exp(-cameraFollowRotationSpeed * delta);
+      const newAzimuth = currentAzimuth + diff * turnRate;
+
+      offset.x = horizontalRadius * Math.sin(newAzimuth);
+      offset.z = horizontalRadius * Math.cos(newAzimuth);
+      characterCamera.position.copy(characterControls.target).add(offset);
+    }
+
+    function updateCameraFollow(delta) {
       const moved = controllable.position.clone().sub(previousControllablePosition);
       characterCamera.position.add(moved);
       characterControls.target.copy(controllable.position).add(cameraLookOffset);
       previousControllablePosition.copy(controllable.position);
+
+      // 클릭 이동 중에는 캐릭터가 도는 방향으로 카메라도 같이 돌게 한다.
+      // (WASD 이동은 카메라 방향 기준으로 움직이는 거라 이미 항상 캐릭터 등
+      // 뒤에 있어서 따로 보정할 필요가 없다.)
+      if (moveTarget) rotateCameraBehindCharacter(delta);
 
       // 확인용 마커를 캐릭터 카메라 위치/방향에 맞춰 갱신
       cameraMarker.position.copy(characterCamera.position);
@@ -942,14 +971,14 @@
 
       if (appState === "spawn") {
         updateSpawnSequence(delta);
-        updateCameraFollow();
+        updateCameraFollow(delta);
         activeControls.update();
         renderer.render(scene, activeCamera);
         return;
       }
 
       updateMovement(delta);
-      updateCameraFollow();
+      updateCameraFollow(delta);
       updateClickMarker(delta);
       updateDebugHud();
       activeControls.update();
