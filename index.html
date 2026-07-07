@@ -78,6 +78,31 @@
     #anim-debug-btn {
       right: 104px;
     }
+    #joystick-base {
+      position: absolute;
+      left: 24px;
+      bottom: 24px;
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.15);
+      border: 2px solid rgba(255, 255, 255, 0.4);
+      z-index: 15;
+      display: none;
+      touch-action: none; /* 드래그 중 브라우저 스크롤/줌 제스처 방지 */
+    }
+    #joystick-knob {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 50px;
+      height: 50px;
+      margin-left: -25px;
+      margin-top: -25px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.55);
+      pointer-events: none; /* 이벤트는 항상 base가 받는다 */
+    }
   </style>
 </head>
 <body>
@@ -87,6 +112,9 @@
     <button id="fullscreen-btn" aria-label="전체화면 전환">⛶</button>
     <button id="uv-checker-btn" aria-label="UV 체크 텍스처 전환">UV</button>
     <button id="anim-debug-btn" aria-label="애니메이션 확인 모드 전환">A</button>
+    <div id="joystick-base">
+      <div id="joystick-knob"></div>
+    </div>
   </div>
   <script type="importmap">
     {
@@ -303,6 +331,7 @@
     function finishStartingGame() {
       appState = "game";
       debugHud.style.display = "block";
+      joystickBase.style.display = "block";
       for (const key of Object.keys(keysPressed)) keysPressed[key] = false;
     }
 
@@ -390,6 +419,10 @@
       if (appState !== "game") return;
 
       const rect = renderer.domElement.getBoundingClientRect();
+
+      // 화면 아래쪽 1/3은 가상 조이스틱 조작 영역이라 지면 클릭(이동)을 무시한다.
+      if (e.clientY - rect.top > rect.height * (2 / 3)) return;
+
       pointerNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       pointerNDC.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(pointerNDC, activeCamera);
@@ -399,6 +432,63 @@
       moveTarget = hits[0].point.clone();
       showClickMarker(hits[0].point);
     });
+
+    // 모바일용 가상 조이스틱 (화면 왼쪽 아래). 드래그한 만큼 -1~1 범위의
+    // 방향 벡터를 만들어서 WASD와 똑같은 입력으로 취급한다.
+    const joystickBase = document.getElementById("joystick-base");
+    const joystickKnob = document.getElementById("joystick-knob");
+    const joystickMaxRadius = 40; // 노브가 움직일 수 있는 최대 반경(px)
+    const joystickDeadzone = 0.15;
+    const joystickVector = { x: 0, y: 0 }; // x: 오른쪽 +, y: 위쪽 +
+    let joystickPointerId = null;
+    const joystickCenter = { x: 0, y: 0 };
+
+    function setJoystickFromPointer(clientX, clientY) {
+      let dx = clientX - joystickCenter.x;
+      let dy = clientY - joystickCenter.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > joystickMaxRadius) {
+        dx = (dx / dist) * joystickMaxRadius;
+        dy = (dy / dist) * joystickMaxRadius;
+      }
+      joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+
+      let nx = dx / joystickMaxRadius;
+      let ny = -dy / joystickMaxRadius; // 화면 좌표는 아래로 갈수록 +y라서 반전
+      if (Math.hypot(nx, ny) < joystickDeadzone) {
+        nx = 0;
+        ny = 0;
+      }
+      joystickVector.x = nx;
+      joystickVector.y = ny;
+    }
+
+    function resetJoystick() {
+      joystickVector.x = 0;
+      joystickVector.y = 0;
+      joystickKnob.style.transform = "translate(0px, 0px)";
+    }
+
+    joystickBase.addEventListener("pointerdown", (e) => {
+      e.stopPropagation(); // 인트로 "탭하면 시작" 로직으로 안 새어나가게 한다
+      joystickPointerId = e.pointerId;
+      joystickBase.setPointerCapture(e.pointerId);
+      const rect = joystickBase.getBoundingClientRect();
+      joystickCenter.x = rect.left + rect.width / 2;
+      joystickCenter.y = rect.top + rect.height / 2;
+      setJoystickFromPointer(e.clientX, e.clientY);
+    });
+    joystickBase.addEventListener("pointermove", (e) => {
+      if (e.pointerId !== joystickPointerId) return;
+      setJoystickFromPointer(e.clientX, e.clientY);
+    });
+    function endJoystick(e) {
+      if (e.pointerId !== joystickPointerId) return;
+      joystickPointerId = null;
+      resetJoystick();
+    }
+    joystickBase.addEventListener("pointerup", endJoystick);
+    joystickBase.addEventListener("pointercancel", endJoystick);
 
     // 조명
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -735,6 +825,10 @@
       if (keysPressed["s"] || keysPressed["arrowdown"]) inputZ -= 1;
       if (keysPressed["a"] || keysPressed["arrowleft"]) inputX -= 1;
       if (keysPressed["d"] || keysPressed["arrowright"]) inputX += 1;
+
+      // 가상 조이스틱 입력도 같은 방식으로 더해준다 (모바일용)
+      inputX = THREE.MathUtils.clamp(inputX + joystickVector.x, -1, 1);
+      inputZ = THREE.MathUtils.clamp(inputZ + joystickVector.y, -1, 1);
 
       if (inputX === 0 && inputZ === 0) {
         // WASD 입력이 없으면 클릭으로 지정해둔 목표 지점을 향해 이동한다.
