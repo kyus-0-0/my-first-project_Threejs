@@ -864,10 +864,16 @@
       controllable.rotation.y = Math.atan2(cameraForward.x, cameraForward.z);
 
       if (animDebugModeIndex === 0) {
-        if (inputZ > 0) fadeToAction(actions.walkForward);
-        else if (inputZ < 0) fadeToAction(actions.walkBackward);
-        else if (inputX > 0) fadeToAction(actions.walkRight);
-        else if (inputX < 0) fadeToAction(actions.walkLeft);
+        // 조이스틱을 완벽하게 수평/수직으로만 미는 경우는 거의 없어서, 절댓값이
+        // 더 큰 축을 기준으로 골라야 한다 (예전엔 Z축을 무조건 우선시해서
+        // 옆으로 밀어도 앞/뒤 애니가 나왔다).
+        if (Math.abs(inputZ) >= Math.abs(inputX)) {
+          if (inputZ > 0) fadeToAction(actions.walkForward);
+          else if (inputZ < 0) fadeToAction(actions.walkBackward);
+        } else {
+          if (inputX > 0) fadeToAction(actions.walkRight);
+          else if (inputX < 0) fadeToAction(actions.walkLeft);
+        }
       }
     }
 
