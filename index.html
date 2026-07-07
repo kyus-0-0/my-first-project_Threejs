@@ -522,6 +522,66 @@
       if (previous) previous.fadeOut(duration);
     }
 
+    // 꼬리 본(tail_01~tail_03_end) 물리(스프링) 시뮬레이션.
+    // 캐릭터가 회전하거나 가속/감속할 때 관성으로 흔들리고, 뒤쪽 마디로
+    // 갈수록 앞 마디의 흔들림을 지연시켜 전달해서 채찍처럼 자연스럽게 움직인다.
+    let tailBones = [];
+    let tailRestQuaternions = [];
+    let tailSwingOffsets = [];
+    let tailSwingVelocities = [];
+    const tailStiffness = 20; // 클수록 원래 자세로 빨리 되돌아옴
+    const tailDamping = 6; // 클수록 진동이 빨리 잦아듦
+    const tailFollowFactor = 0.7; // 앞 마디 흔들림이 다음 마디로 전달되는 비율
+    const tailTurnInfluence = 0.2; // 회전 관성이 꼬리를 얼마나 흔드는지
+    const tailAccelInfluence = 0.08; // 가속/감속(출발·정지)이 꼬리를 얼마나 흔드는지
+    let previousControllableRotationY = 0;
+    const previousControllableSpeed = new THREE.Vector3();
+    const tailVelocityTemp = new THREE.Vector3();
+
+    function updateTailPhysics(delta) {
+      if (tailBones.length === 0 || delta <= 0) return;
+
+      let rotDelta = controllable.rotation.y - previousControllableRotationY;
+      rotDelta = Math.atan2(Math.sin(rotDelta), Math.cos(rotDelta)); // 최단 각도로 정규화
+      previousControllableRotationY = controllable.rotation.y;
+      const angularVelocity = rotDelta / delta;
+
+      // 이 시점에는 아직 updateCameraFollow()가 previousControllablePosition을
+      // 갱신하기 전이라, 두 값의 차이가 "이번 프레임에 이동한 거리"가 된다.
+      const velocity = tailVelocityTemp
+        .copy(controllable.position)
+        .sub(previousControllablePosition)
+        .divideScalar(delta);
+      const acceleration = (velocity.x - previousControllableSpeed.x + (velocity.z - previousControllableSpeed.z)) / delta;
+      previousControllableSpeed.copy(velocity);
+
+      const drivingOffsetZ = -angularVelocity * tailTurnInfluence;
+      const drivingOffsetX = -acceleration * tailAccelInfluence;
+
+      for (let i = 0; i < tailBones.length; i++) {
+        const targetX = i === 0 ? drivingOffsetX : tailSwingOffsets[i - 1].x * tailFollowFactor;
+        const targetZ = i === 0 ? drivingOffsetZ : tailSwingOffsets[i - 1].z * tailFollowFactor;
+
+        const vel = tailSwingVelocities[i];
+        const off = tailSwingOffsets[i];
+
+        vel.x += (targetX - off.x) * tailStiffness * delta;
+        vel.z += (targetZ - off.z) * tailStiffness * delta;
+
+        const dampingFactor = Math.max(0, 1 - tailDamping * delta);
+        vel.x *= dampingFactor;
+        vel.z *= dampingFactor;
+
+        off.x += vel.x * delta;
+        off.z += vel.z * delta;
+
+        const bone = tailBones[i];
+        bone.quaternion.copy(tailRestQuaternions[i]);
+        bone.rotateX(off.x);
+        bone.rotateZ(off.z);
+      }
+    }
+
     // 애니메이션 확인용 "A" 버튼: 누를 때마다 7단계로 순환한다.
     // 기본(자동) → 없음 → idle → 앞 → 뒤 → 왼쪽 → 오른쪽 → 다시 기본(자동)
     // "기본(자동)"이 아닌 동안에는 updateMovement/moveTowardClickTarget이
@@ -660,6 +720,20 @@
 
         controllable = object;
         previousControllablePosition.copy(object.position);
+
+        // 꼬리 본을 찾아서 물리 시뮬레이션(스프링) 대상으로 등록한다.
+        const tailBoneNames = ["tail_01", "tail_02", "tail_03", "tail_03_end"];
+        tailBones = tailBoneNames
+          .map((name) => object.getObjectByName(name))
+          .filter((bone) => bone != null);
+        tailRestQuaternions = tailBones.map((bone) => bone.quaternion.clone());
+        tailSwingOffsets = tailBones.map(() => ({ x: 0, z: 0 }));
+        tailSwingVelocities = tailBones.map(() => ({ x: 0, z: 0 }));
+        if (tailBones.length > 0) {
+          console.log(`꼬리 본 ${tailBones.length}개 시뮬레이션 등록: ${tailBones.map((b) => b.name).join(", ")}`);
+        } else {
+          console.warn("꼬리 본(tail_01~tail_03_end)을 찾지 못했습니다.");
+        }
 
         // 업로드된 텍스처를 캐릭터 메시에 입힌다.
         textureLoader.load(
@@ -978,6 +1052,7 @@
       }
 
       updateMovement(delta);
+      updateTailPhysics(delta);
       updateCameraFollow(delta);
       updateClickMarker(delta);
       updateDebugHud();
