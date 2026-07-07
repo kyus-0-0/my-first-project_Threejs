@@ -534,9 +534,12 @@
     const tailFollowFactor = 0.7; // 앞 마디 흔들림이 다음 마디로 전달되는 비율
     const tailTurnInfluence = 0.2; // 회전 관성이 꼬리를 얼마나 흔드는지
     const tailAccelInfluence = 0.08; // 가속/감속(출발·정지)이 꼬리를 얼마나 흔드는지
+    const tailWalkSwayAmount = 0.4; // 걷는 동안 좌우로 흔드는 폭(라디안)
+    const tailWalkSwayFrequency = 8; // 이동 속도에 곱해져 흔들리는 빠르기를 결정
     let previousControllableRotationY = 0;
     const previousControllableSpeed = new THREE.Vector3();
     const tailVelocityTemp = new THREE.Vector3();
+    let tailGaitPhase = 0;
 
     function updateTailPhysics(delta) {
       if (tailBones.length === 0 || delta <= 0) return;
@@ -552,10 +555,18 @@
         .copy(controllable.position)
         .sub(previousControllablePosition)
         .divideScalar(delta);
+      const speed = Math.hypot(velocity.x, velocity.z);
       const acceleration = (velocity.x - previousControllableSpeed.x + (velocity.z - previousControllableSpeed.z)) / delta;
       previousControllableSpeed.copy(velocity);
 
-      const drivingOffsetZ = -angularVelocity * tailTurnInfluence;
+      // 직선으로 계속 걸을 때는 속도가 일정해서 실제 가속도가 거의 0이 되어
+      // (물리적으로는 맞지만) 꼬리 흔들림이 잘 안 느껴진다. 그래서 이동 속도에
+      // 비례하는 걸음 주기 흔들림을 추가로 얹어서, 걷는 동안 계속 살랑거리게 한다.
+      tailGaitPhase += speed * tailWalkSwayFrequency * delta;
+      const speedRatio = Math.min(speed / moveSpeed, 1);
+      const walkSway = Math.sin(tailGaitPhase) * speedRatio * tailWalkSwayAmount;
+
+      const drivingOffsetZ = -angularVelocity * tailTurnInfluence + walkSway;
       const drivingOffsetX = -acceleration * tailAccelInfluence;
 
       for (let i = 0; i < tailBones.length; i++) {
