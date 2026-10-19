@@ -704,125 +704,350 @@
       cycleTextureMode();
     });
 
+    // 사용할 캐릭터: "human" = 코드로 만든 사람, "bear" = models/ch_02.fbx 곰 캐릭터
+    const CHARACTER_MODEL = "human";
+
     // models/ch_02.fbx 가 저장소에 올라오면 자동으로 불러와 임시 박스 자리에 표시
     let modelStatus = "로딩 중...";
     const textureLoader = new THREE.TextureLoader();
     const fbxLoader = new FBXLoader();
-    fbxLoader.load(
-      "./models/ch_02.fbx",
-      async (object) => {
-        scene.remove(placeholderBox);
-        scene.add(object);
+    function loadBearCharacter() {
+      fbxLoader.load(
+        "./models/ch_02.fbx",
+        async (object) => {
+          scene.remove(placeholderBox);
+          scene.add(object);
 
-        // fbx 원본 스케일을 모르기 때문에, 실제 크기를 측정해서
-        // 사람 키 정도(1.8 유닛)에 맞춰 자동으로 스케일을 계산한다.
-        const box = new THREE.Box3().setFromObject(object);
-        const size = box.getSize(new THREE.Vector3());
-        const desiredHeight = 1.8;
-        const scale = size.y > 0.0001 ? desiredHeight / size.y : 1;
-        object.scale.setScalar(scale);
+          // fbx 원본 스케일을 모르기 때문에, 실제 크기를 측정해서
+          // 사람 키 정도(1.8 유닛)에 맞춰 자동으로 스케일을 계산한다.
+          const box = new THREE.Box3().setFromObject(object);
+          const size = box.getSize(new THREE.Vector3());
+          const desiredHeight = 1.8;
+          const scale = size.y > 0.0001 ? desiredHeight / size.y : 1;
+          object.scale.setScalar(scale);
 
-        // 스케일 적용 후 다시 측정해서 중심을 (x,z)=0 에, 발을 y=0 바닥에 맞춘다.
-        const scaledBox = new THREE.Box3().setFromObject(object);
-        const center = scaledBox.getCenter(new THREE.Vector3());
-        object.position.x -= center.x;
-        object.position.z -= center.z;
-        object.position.y -= scaledBox.min.y;
+          // 스케일 적용 후 다시 측정해서 중심을 (x,z)=0 에, 발을 y=0 바닥에 맞춘다.
+          const scaledBox = new THREE.Box3().setFromObject(object);
+          const center = scaledBox.getCenter(new THREE.Vector3());
+          object.position.x -= center.x;
+          object.position.z -= center.z;
+          object.position.y -= scaledBox.min.y;
 
-        controllable = object;
-        previousControllablePosition.copy(object.position);
+          controllable = object;
+          previousControllablePosition.copy(object.position);
 
-        // 꼬리 본을 찾아서 물리 시뮬레이션(스프링) 대상으로 등록한다.
-        const tailBoneNames = ["tail_01", "tail_02", "tail_03", "tail_03_end"];
-        tailBones = tailBoneNames
-          .map((name) => object.getObjectByName(name))
-          .filter((bone) => bone != null);
-        tailRestQuaternions = tailBones.map((bone) => bone.quaternion.clone());
-        tailSwingOffsets = tailBones.map(() => ({ x: 0, z: 0 }));
-        tailSwingVelocities = tailBones.map(() => ({ x: 0, z: 0 }));
-        if (tailBones.length > 0) {
-          console.log(`꼬리 본 ${tailBones.length}개 시뮬레이션 등록: ${tailBones.map((b) => b.name).join(", ")}`);
-        } else {
-          console.warn("꼬리 본(tail_01~tail_03_end)을 찾지 못했습니다.");
-        }
-
-        // 업로드된 텍스처를 캐릭터 메시에 입힌다.
-        textureLoader.load(
-          "./models/texture/ch_map_02.jpg",
-          (texture) => {
-            texture.colorSpace = THREE.SRGBColorSpace;
-            texture.flipY = true; // V 반전 상태가 정상으로 확인되어 기본값으로 사용
-            characterTexture = texture;
-
-            characterTextureFlipU = texture.clone();
-            characterTextureFlipU.wrapS = THREE.RepeatWrapping;
-            characterTextureFlipU.repeat.x = -1;
-            characterTextureFlipU.offset.x = 1;
-            characterTextureFlipU.needsUpdate = true;
-
-            characterTextureFlipV = texture.clone();
-            characterTextureFlipV.wrapT = THREE.RepeatWrapping;
-            characterTextureFlipV.repeat.y = -1;
-            characterTextureFlipV.offset.y = 1;
-            characterTextureFlipV.needsUpdate = true;
-
-            characterMaterials = [];
-            object.traverse((child) => {
-              if (!child.isMesh) return;
-              const materials = Array.isArray(child.material) ? child.material : [child.material];
-              for (const mat of materials) {
-                characterMaterials.push(mat);
-              }
-            });
-            applyTextureMode();
-            console.log("ch_map_02.jpg 텍스처 적용 완료 ('u' 키 또는 UV 버튼으로 확인 모드 순환 가능)");
-          },
-          undefined,
-          (error) => {
-            console.error("ch_map_02.jpg 텍스처 로드 실패:", error);
+          // 꼬리 본을 찾아서 물리 시뮬레이션(스프링) 대상으로 등록한다.
+          const tailBoneNames = ["tail_01", "tail_02", "tail_03", "tail_03_end"];
+          tailBones = tailBoneNames
+            .map((name) => object.getObjectByName(name))
+            .filter((bone) => bone != null);
+          tailRestQuaternions = tailBones.map((bone) => bone.quaternion.clone());
+          tailSwingOffsets = tailBones.map(() => ({ x: 0, z: 0 }));
+          tailSwingVelocities = tailBones.map(() => ({ x: 0, z: 0 }));
+          if (tailBones.length > 0) {
+            console.log(`꼬리 본 ${tailBones.length}개 시뮬레이션 등록: ${tailBones.map((b) => b.name).join(", ")}`);
+          } else {
+            console.warn("꼬리 본(tail_01~tail_03_end)을 찾지 못했습니다.");
           }
-        );
 
-        modelStatus = "로드 완료";
-        console.log(
-          `ch_02.fbx 로드 완료 (원본 크기: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)}, 적용 스케일: ${scale.toFixed(4)})`
-        );
+          // 업로드된 텍스처를 캐릭터 메시에 입힌다.
+          textureLoader.load(
+            "./models/texture/ch_map_02.jpg",
+            (texture) => {
+              texture.colorSpace = THREE.SRGBColorSpace;
+              texture.flipY = true; // V 반전 상태가 정상으로 확인되어 기본값으로 사용
+              characterTexture = texture;
 
-        // idle / 4방향 walk 애니메이션을 각각 별도 fbx에서 불러와 같은 스켈레톤에 적용한다.
-        try {
-          const [idleFbx, walkFwdFbx, walkBackFbx, walkLeftFbx, walkRightFbx] = await Promise.all([
-            fbxLoader.loadAsync("./models/ani/ch_02_idle.FBX"),
-            fbxLoader.loadAsync("./models/ani/ch_02_walk_fwd.FBX"),
-            fbxLoader.loadAsync("./models/ani/ch_02_walk_bwd.FBX"),
-            fbxLoader.loadAsync("./models/ani/ch_02_walk_left.FBX"),
-            fbxLoader.loadAsync("./models/ani/ch_02_walk_right.FBX"),
-          ]);
+              characterTextureFlipU = texture.clone();
+              characterTextureFlipU.wrapS = THREE.RepeatWrapping;
+              characterTextureFlipU.repeat.x = -1;
+              characterTextureFlipU.offset.x = 1;
+              characterTextureFlipU.needsUpdate = true;
 
-          mixer = new THREE.AnimationMixer(object);
-          actions.idle = mixer.clipAction(idleFbx.animations[0]);
-          actions.walkForward = mixer.clipAction(walkFwdFbx.animations[0]);
-          actions.walkBackward = mixer.clipAction(walkBackFbx.animations[0]);
-          actions.walkLeft = mixer.clipAction(walkLeftFbx.animations[0]);
-          actions.walkRight = mixer.clipAction(walkRightFbx.animations[0]);
+              characterTextureFlipV = texture.clone();
+              characterTextureFlipV.wrapT = THREE.RepeatWrapping;
+              characterTextureFlipV.repeat.y = -1;
+              characterTextureFlipV.offset.y = 1;
+              characterTextureFlipV.needsUpdate = true;
 
-          currentAction = actions.idle;
-          currentAction.play();
+              characterMaterials = [];
+              object.traverse((child) => {
+                if (!child.isMesh) return;
+                const materials = Array.isArray(child.material) ? child.material : [child.material];
+                for (const mat of materials) {
+                  characterMaterials.push(mat);
+                }
+              });
+              applyTextureMode();
+              console.log("ch_map_02.jpg 텍스처 적용 완료 ('u' 키 또는 UV 버튼으로 확인 모드 순환 가능)");
+            },
+            undefined,
+            (error) => {
+              console.error("ch_map_02.jpg 텍스처 로드 실패:", error);
+            }
+          );
 
-          console.log("캐릭터 애니메이션 5종(idle/walk x4) 로드 완료");
-        } catch (err) {
-          console.error("캐릭터 애니메이션 로드 실패:", err);
+          modelStatus = "로드 완료";
+          console.log(
+            `ch_02.fbx 로드 완료 (원본 크기: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)}, 적용 스케일: ${scale.toFixed(4)})`
+          );
+
+          // idle / 4방향 walk 애니메이션을 각각 별도 fbx에서 불러와 같은 스켈레톤에 적용한다.
+          try {
+            const [idleFbx, walkFwdFbx, walkBackFbx, walkLeftFbx, walkRightFbx] = await Promise.all([
+              fbxLoader.loadAsync("./models/ani/ch_02_idle.FBX"),
+              fbxLoader.loadAsync("./models/ani/ch_02_walk_fwd.FBX"),
+              fbxLoader.loadAsync("./models/ani/ch_02_walk_bwd.FBX"),
+              fbxLoader.loadAsync("./models/ani/ch_02_walk_left.FBX"),
+              fbxLoader.loadAsync("./models/ani/ch_02_walk_right.FBX"),
+            ]);
+
+            mixer = new THREE.AnimationMixer(object);
+            actions.idle = mixer.clipAction(idleFbx.animations[0]);
+            actions.walkForward = mixer.clipAction(walkFwdFbx.animations[0]);
+            actions.walkBackward = mixer.clipAction(walkBackFbx.animations[0]);
+            actions.walkLeft = mixer.clipAction(walkLeftFbx.animations[0]);
+            actions.walkRight = mixer.clipAction(walkRightFbx.animations[0]);
+
+            currentAction = actions.idle;
+            currentAction.play();
+
+            console.log("캐릭터 애니메이션 5종(idle/walk x4) 로드 완료");
+          } catch (err) {
+            console.error("캐릭터 애니메이션 로드 실패:", err);
+          }
+        },
+        (xhr) => {
+          if (xhr.lengthComputable) {
+            modelStatus = `로딩 중... ${((xhr.loaded / xhr.total) * 100).toFixed(0)}%`;
+          }
+        },
+        (error) => {
+          modelStatus = "로드 실패 (콘솔 확인)";
+          console.error("ch_02.fbx 로드 실패:", error);
         }
-      },
-      (xhr) => {
-        if (xhr.lengthComputable) {
-          modelStatus = `로딩 중... ${((xhr.loaded / xhr.total) * 100).toFixed(0)}%`;
-        }
-      },
-      (error) => {
-        modelStatus = "로드 실패 (콘솔 확인)";
-        console.error("ch_02.fbx 로드 실패:", error);
+      );
+    }
+
+    // ── 코드로 만드는 사람 캐릭터 ──────────────────────────────────
+    // 외부 fbx 없이 뼈대(Bone)와 몸 파츠(캡슐/구/박스)를 직접 만들고,
+    // idle / 앞 / 뒤 / 왼쪽 / 오른쪽 걷기 애니메이션도 키프레임으로 생성한다.
+    // 정면은 +Z 방향(다른 캐릭터와 같은 기준), 발바닥이 y=0, 키는 약 1.8.
+    const HUMAN_HIPS_HEIGHT = 0.95;
+    const HUMAN_BONE_NAMES = [
+      "hips", "spine", "chest", "neck", "head",
+      "leftUpperArm", "leftLowerArm", "leftHand",
+      "rightUpperArm", "rightLowerArm", "rightHand",
+      "leftUpperLeg", "leftLowerLeg", "leftFoot",
+      "rightUpperLeg", "rightLowerLeg", "rightFoot",
+    ];
+
+    function createHumanCharacter() {
+      const skin = new THREE.MeshStandardMaterial({ color: 0xf1c7a0, roughness: 0.8 });
+      const shirt = new THREE.MeshStandardMaterial({ color: 0x3a6ea5, roughness: 0.8 });
+      const pants = new THREE.MeshStandardMaterial({ color: 0x2f3a4a, roughness: 0.9 });
+      const shoes = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.7 });
+      const hair = new THREE.MeshStandardMaterial({ color: 0x3b2a20, roughness: 0.9 });
+      const eye = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.4 });
+
+      const bones = {};
+      function addBone(name, parent, x, y, z) {
+        const bone = new THREE.Bone();
+        bone.name = name;
+        bone.position.set(x, y, z);
+        parent.add(bone);
+        bones[name] = bone;
+        return bone;
       }
-    );
+      function addPart(bone, geometry, material, x, y, z, sx = 1, sy = 1, sz = 1) {
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(x, y, z);
+        mesh.scale.set(sx, sy, sz);
+        bone.add(mesh);
+        return mesh;
+      }
+
+      const root = new THREE.Group();
+      root.name = "humanCharacter";
+
+      // 몸통 / 머리
+      const hips = addBone("hips", root, 0, HUMAN_HIPS_HEIGHT, 0);
+      addPart(hips, new THREE.BoxGeometry(0.32, 0.16, 0.2), pants, 0, 0, 0);
+      const spine = addBone("spine", hips, 0, 0.1, 0);
+      addPart(spine, new THREE.CapsuleGeometry(0.15, 0.1, 6, 16), shirt, 0, 0.1, 0, 1.1, 0.7, 0.75);
+      const chest = addBone("chest", spine, 0, 0.2, 0);
+      addPart(chest, new THREE.CapsuleGeometry(0.17, 0.14, 6, 16), shirt, 0, 0.13, 0, 1.15, 0.6, 0.75);
+      const neck = addBone("neck", chest, 0, 0.28, 0);
+      addPart(neck, new THREE.CylinderGeometry(0.055, 0.06, 0.1, 12), skin, 0, 0.04, 0);
+      const head = addBone("head", neck, 0, 0.08, 0);
+      addPart(head, new THREE.SphereGeometry(0.12, 24, 16), skin, 0, 0.11, 0, 0.95, 1.05, 1);
+      addPart(head, new THREE.SphereGeometry(0.128, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.55), hair, 0, 0.125, -0.008);
+      addPart(head, new THREE.SphereGeometry(0.017, 10, 8), eye, 0.042, 0.125, 0.105);
+      addPart(head, new THREE.SphereGeometry(0.017, 10, 8), eye, -0.042, 0.125, 0.105);
+      addPart(head, new THREE.SphereGeometry(0.018, 10, 8), skin, 0, 0.095, 0.118);
+
+      // 팔 (캐릭터 기준 왼쪽 = +X)
+      for (const side of ["left", "right"]) {
+        const s = side === "left" ? 1 : -1;
+        const upperArm = addBone(`${side}UpperArm`, chest, 0.23 * s, 0.24, 0);
+        addPart(upperArm, new THREE.CapsuleGeometry(0.055, 0.2, 6, 12), shirt, 0, -0.13, 0);
+        const lowerArm = addBone(`${side}LowerArm`, upperArm, 0, -0.28, 0);
+        addPart(lowerArm, new THREE.CapsuleGeometry(0.045, 0.18, 6, 12), skin, 0, -0.12, 0);
+        const hand = addBone(`${side}Hand`, lowerArm, 0, -0.25, 0);
+        addPart(hand, new THREE.SphereGeometry(0.05, 12, 10), skin, 0, -0.05, 0, 0.8, 1.2, 0.6);
+      }
+
+      // 다리
+      for (const side of ["left", "right"]) {
+        const s = side === "left" ? 1 : -1;
+        const upperLeg = addBone(`${side}UpperLeg`, hips, 0.1 * s, -0.05, 0);
+        addPart(upperLeg, new THREE.CapsuleGeometry(0.075, 0.25, 6, 12), pants, 0, -0.2, 0);
+        const lowerLeg = addBone(`${side}LowerLeg`, upperLeg, 0, -0.42, 0);
+        addPart(lowerLeg, new THREE.CapsuleGeometry(0.06, 0.26, 6, 12), pants, 0, -0.2, 0);
+        const foot = addBone(`${side}Foot`, lowerLeg, 0, -0.42, 0);
+        addPart(foot, new THREE.BoxGeometry(0.1, 0.07, 0.22), shoes, 0, -0.025, 0.05);
+      }
+
+      return { root, bones };
+    }
+
+    // 기본 자세: 팔은 살짝 벌리고 팔꿈치/무릎은 살짝 굽힌다. 값은 [x, y, z] 오일러(라디안).
+    function humanBasePose() {
+      return {
+        leftUpperArm: [0, 0, 0.1],
+        rightUpperArm: [0, 0, -0.1],
+        leftLowerArm: [-0.15, 0, 0],
+        rightLowerArm: [-0.15, 0, 0],
+        leftLowerLeg: [0.05, 0, 0],
+        rightLowerLeg: [0.05, 0, 0],
+        hipsY: HUMAN_HIPS_HEIGHT,
+      };
+    }
+
+    // 좌우 대칭 포즈 만들기 (왼쪽 걷기 → 오른쪽 걷기)
+    function mirrorHumanPose(pose) {
+      const mirrored = {};
+      for (const [key, value] of Object.entries(pose)) {
+        if (key === "hipsY") {
+          mirrored[key] = value;
+          continue;
+        }
+        let mirroredKey = key;
+        if (key.startsWith("left")) mirroredKey = "right" + key.slice(4);
+        else if (key.startsWith("right")) mirroredKey = "left" + key.slice(5);
+        mirrored[mirroredKey] = [value[0], -value[1], -value[2]];
+      }
+      return mirrored;
+    }
+
+    // t(0~1)를 받아 포즈를 돌려주는 함수로부터 반복 재생용 AnimationClip을 만든다.
+    function buildHumanClip(name, duration, poseAt, samples = 24) {
+      const times = [];
+      const quaternionValues = Object.fromEntries(HUMAN_BONE_NAMES.map((b) => [b, []]));
+      const hipsPositions = [];
+      const euler = new THREE.Euler();
+      const quaternion = new THREE.Quaternion();
+
+      for (let i = 0; i <= samples; i++) {
+        const t = i / samples;
+        times.push(t * duration);
+        const pose = poseAt(t);
+        for (const boneName of HUMAN_BONE_NAMES) {
+          const [x, y, z] = pose[boneName] || [0, 0, 0];
+          quaternion.setFromEuler(euler.set(x, y, z));
+          quaternionValues[boneName].push(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
+        }
+        hipsPositions.push(0, pose.hipsY ?? HUMAN_HIPS_HEIGHT, 0);
+      }
+
+      const tracks = HUMAN_BONE_NAMES.map(
+        (boneName) => new THREE.QuaternionKeyframeTrack(`${boneName}.quaternion`, times, quaternionValues[boneName])
+      );
+      tracks.push(new THREE.VectorKeyframeTrack("hips.position", times, hipsPositions));
+      return new THREE.AnimationClip(name, duration, tracks);
+    }
+
+    function humanIdlePose(t) {
+      const p = t * Math.PI * 2;
+      const pose = humanBasePose();
+      pose.spine = [0.02 * Math.sin(p), 0, 0];
+      pose.chest = [0.02 * Math.sin(p), 0, 0];
+      pose.head = [0, 0.08 * Math.sin(p), 0];
+      pose.leftUpperArm = [0, 0, 0.1 + 0.03 * Math.sin(p)];
+      pose.rightUpperArm = [0, 0, -0.1 - 0.03 * Math.sin(p)];
+      pose.hipsY = HUMAN_HIPS_HEIGHT + 0.006 * Math.sin(p * 2);
+      return pose;
+    }
+
+    // 앞으로 걷기: 다리와 팔을 반대로 흔들고, 앞으로 나가는 다리의 무릎을 굽힌다.
+    function humanWalkForwardPose(t) {
+      const p = t * Math.PI * 2;
+      const s = Math.sin(p);
+      const c = Math.cos(p);
+      const pose = humanBasePose();
+      pose.leftUpperLeg = [-0.45 * s, 0, 0];
+      pose.rightUpperLeg = [0.45 * s, 0, 0];
+      pose.leftLowerLeg = [0.1 + 0.7 * Math.max(0, c), 0, 0];
+      pose.rightLowerLeg = [0.1 + 0.7 * Math.max(0, -c), 0, 0];
+      pose.leftUpperArm = [0.4 * s, 0, 0.1];
+      pose.rightUpperArm = [-0.4 * s, 0, -0.1];
+      pose.hips = [0, 0.08 * s, 0];
+      pose.spine = [0.06, 0, 0];
+      pose.chest = [0, -0.1 * s, 0];
+      pose.hipsY = HUMAN_HIPS_HEIGHT + 0.025 * (Math.cos(p * 2) - 1);
+      return pose;
+    }
+
+    // 뒤로 걷기: 앞으로 걷기를 시간 역순으로 재생하고 몸을 살짝 뒤로 젖힌다.
+    function humanWalkBackwardPose(t) {
+      const pose = humanWalkForwardPose(1 - t);
+      pose.spine = [-0.04, 0, 0];
+      return pose;
+    }
+
+    // 왼쪽 옆걸음: 왼발을 옆으로 내딛고 오른발을 끌어오는 동작을 반복한다.
+    function humanWalkLeftPose(t) {
+      const p = t * Math.PI * 2;
+      const s = Math.sin(p);
+      const pose = humanBasePose();
+      pose.leftUpperLeg = [0, 0, 0.3 * Math.max(0, s)];
+      pose.rightUpperLeg = [0, 0, 0.25 * Math.max(0, -s)];
+      pose.leftLowerLeg = [0.1 + 0.4 * Math.max(0, s), 0, 0];
+      pose.rightLowerLeg = [0.1 + 0.4 * Math.max(0, -s), 0, 0];
+      pose.leftUpperArm = [0, 0, 0.1 + 0.12 * Math.max(0, s)];
+      pose.rightUpperArm = [0, 0, -0.1 + 0.08 * Math.max(0, -s)];
+      pose.spine = [0, 0, -0.05];
+      pose.hipsY = HUMAN_HIPS_HEIGHT + 0.02 * (Math.cos(p * 2) - 1);
+      return pose;
+    }
+
+    function humanWalkRightPose(t) {
+      return mirrorHumanPose(humanWalkLeftPose(t));
+    }
+
+    function setupHumanCharacter() {
+      const { root } = createHumanCharacter();
+      scene.remove(placeholderBox);
+      scene.add(root);
+      root.visible = placeholderBox.visible; // 스폰 연출 중이면 숨긴 상태를 그대로 이어받는다
+
+      controllable = root;
+      previousControllablePosition.copy(root.position);
+      previousControllableRotationY = root.rotation.y;
+
+      mixer = new THREE.AnimationMixer(root);
+      actions.idle = mixer.clipAction(buildHumanClip("human_idle", 3, humanIdlePose));
+      actions.walkForward = mixer.clipAction(buildHumanClip("human_walk_fwd", 1, humanWalkForwardPose));
+      actions.walkBackward = mixer.clipAction(buildHumanClip("human_walk_bwd", 1.1, humanWalkBackwardPose));
+      actions.walkLeft = mixer.clipAction(buildHumanClip("human_walk_left", 0.9, humanWalkLeftPose));
+      actions.walkRight = mixer.clipAction(buildHumanClip("human_walk_right", 0.9, humanWalkRightPose));
+
+      currentAction = actions.idle;
+      currentAction.play();
+
+      modelStatus = "사람 모델 (코드로 생성)";
+      console.log("코드로 만든 사람 캐릭터 + 애니메이션 5종 준비 완료");
+    }
 
     // 캐릭터 카메라 위치를 확인용으로 표시하는 마커 (월드 카메라에서 보임)
     const cameraMarker = new THREE.Mesh(
@@ -1070,6 +1295,14 @@
       activeControls.update();
       renderer.render(scene, activeCamera);
     }
+
+    // 모든 변수가 준비된 뒤에 캐릭터를 만든다/불러온다.
+    if (CHARACTER_MODEL === "human") {
+      setupHumanCharacter();
+    } else {
+      loadBearCharacter();
+    }
+
     animate();
   </script>
 </body>
